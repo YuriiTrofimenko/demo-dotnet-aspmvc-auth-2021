@@ -1,0 +1,15 @@
+﻿@{
+    var returnUrl =
+        System.Web.HttpUtility.UrlEncode(ViewData["returnUrl"] as string);
+    var error = TempData["Error"] as string;
+}
+<h1>Login Page</h1>
+@if (!string.IsNullOrEmpty(error))
+{
+    <h2 class="alert-danger p-2">@error</h2>
+}
+<form action="/login?returnUrl=@returnUrl" method="post">
+    <input type="text" name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <input type="submit" value="login">
+</form>
