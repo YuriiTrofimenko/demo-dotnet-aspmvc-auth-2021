@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace AspNet5CookieAuth
 {
@@ -23,6 +24,7 @@ namespace AspNet5CookieAuth
 
         public IConfiguration Configuration { get; }
         private static readonly string GOOGLE_OPEN_ID_AUTH_SCHEME = "GoogleOpenID";
+        private static readonly string OKTA_OPEN_ID_AUTH_SCHEME = "OktaOpenID";
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
@@ -33,33 +35,14 @@ namespace AspNet5CookieAuth
                 {
                     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                     // options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
-                    options.DefaultChallengeScheme = GOOGLE_OPEN_ID_AUTH_SCHEME;
+                    // options.DefaultChallengeScheme = GOOGLE_OPEN_ID_AUTH_SCHEME;
+                    options.DefaultChallengeScheme = OKTA_OPEN_ID_AUTH_SCHEME;
                 }
             ).AddCookie(
                 options =>
                 {
                     options.LoginPath = "/login";
                     options.AccessDeniedPath = "/denied";
-                    options.Events = new CookieAuthenticationEvents()
-                    {
-                        OnSigningIn = async context =>
-                        {
-                            var principal = context.Principal;
-                            if (principal != null && principal.HasClaim(c => c.Type == ClaimTypes.NameIdentifier))
-                            {
-                                Console.WriteLine(principal.Claims
-                                    .FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value);
-                                if (principal.Claims
-                                    .FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value == "John")
-                                {
-                                    var claimsIdentity = principal.Identity as ClaimsIdentity;
-                                    Console.WriteLine(claimsIdentity);
-                                    claimsIdentity?.AddClaim(new(ClaimTypes.Role, "Admin"));
-                                }
-                            }
-                            await Task.CompletedTask;
-                        }
-                    };
                 }
             ).AddOpenIdConnect(GOOGLE_OPEN_ID_AUTH_SCHEME, options =>
                 {
@@ -68,7 +51,14 @@ namespace AspNet5CookieAuth
                     options.ClientSecret = "RrdDUGev8tSyzs9UPIeE646t";
                     options.CallbackPath = "/auth";
                 }
-            );
+            ).AddOpenIdConnect(OKTA_OPEN_ID_AUTH_SCHEME, options =>
+            {
+                options.Authority = "https://dev-12251583.okta.com";
+                options.ClientId = "0oa1i21bkolUSiwoy5d7";
+                options.ClientSecret = "YftbgfYlOKinITWCfYD9gbnZbMZizNbh1UCv4lmN";
+                options.CallbackPath = "/okta-auth";
+                options.ResponseType = OpenIdConnectResponseType.Code;
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
