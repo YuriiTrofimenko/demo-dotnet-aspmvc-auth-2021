@@ -23,7 +23,7 @@ namespace AspNet5CookieAuth
         }
 
         public IConfiguration Configuration { get; }
-        private static readonly string GOOGLE_OPEN_ID_AUTH_SCHEME = "GoogleOpenID";
+        public static readonly string GOOGLE_OPEN_ID_AUTH_SCHEME = "GoogleOpenID";
         private static readonly string OKTA_OPEN_ID_AUTH_SCHEME = "OktaOpenID";
 
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -36,13 +36,25 @@ namespace AspNet5CookieAuth
                     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                     // options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
                     // options.DefaultChallengeScheme = GOOGLE_OPEN_ID_AUTH_SCHEME;
-                    options.DefaultChallengeScheme = OKTA_OPEN_ID_AUTH_SCHEME;
+                    // options.DefaultChallengeScheme = OKTA_OPEN_ID_AUTH_SCHEME;
+                    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 }
             ).AddCookie(
                 options =>
                 {
                     options.LoginPath = "/login";
                     options.AccessDeniedPath = "/denied";
+                    options.Events = new CookieAuthenticationEvents()
+                    {
+                        OnSigningIn = async context =>
+                        {
+                            var scheme =
+                                context.Properties.Items.FirstOrDefault(pair => pair.Key == ".AuthScheme");
+                            var claim = new Claim(scheme.Key, scheme.Value);
+                            var claimsIdentity = context.Principal?.Identity as ClaimsIdentity;
+                            claimsIdentity?.AddClaim(claim);
+                        }
+                    };
                 }
             ).AddOpenIdConnect(GOOGLE_OPEN_ID_AUTH_SCHEME, options =>
                 {
@@ -53,11 +65,16 @@ namespace AspNet5CookieAuth
                 }
             ).AddOpenIdConnect(OKTA_OPEN_ID_AUTH_SCHEME, options =>
             {
-                options.Authority = "https://dev-12251583.okta.com";
+                options.Authority = "https://dev-12251583.okta.com/oauth2/default";
                 options.ClientId = "0oa1i21bkolUSiwoy5d7";
                 options.ClientSecret = "YftbgfYlOKinITWCfYD9gbnZbMZizNbh1UCv4lmN";
                 options.CallbackPath = "/okta-auth";
+                options.SignedOutCallbackPath = "/okta-signout";
                 options.ResponseType = OpenIdConnectResponseType.Code;
+                options.SaveTokens = true;
+                options.Scope.Add("openid");
+                options.Scope.Add("profile");
+                options.Scope.Add("offline_access");
             });
         }
 
