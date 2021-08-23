@@ -3,15 +3,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using AspNet5CookieAuth.Data;
+using AspNet5CookieAuth.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 
 namespace AspNet5CookieAuth
 {
@@ -30,6 +34,10 @@ namespace AspNet5CookieAuth
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+            services.AddDbContext<AuthDbContext>(
+                options => options.UseSqlite(Configuration.GetConnectionString("DefaultConnection"))
+            );
+            services.AddScoped<UserService>();
             services.AddAuthentication(
                 options =>
                 {
@@ -52,29 +60,50 @@ namespace AspNet5CookieAuth
                                 context.Properties.Items.FirstOrDefault(pair => pair.Key == ".AuthScheme");
                             var claim = new Claim(scheme.Key, scheme.Value);
                             var claimsIdentity = context.Principal?.Identity as ClaimsIdentity;
+                            var userService =
+                                context.HttpContext.RequestServices.GetRequiredService(typeof(UserService))
+                                    as UserService;
+                            var nameIdentifier = claimsIdentity?.Claims
+                                .FirstOrDefault(m => m.Type == ClaimTypes.NameIdentifier)?.Value;
+                            if (userService != null && nameIdentifier != null)
+                            {
+                                var appUser = userService.GetUserByExternalProvider(scheme.Value, nameIdentifier) ??
+                                              userService.AddNewUser(scheme.Value, claimsIdentity.Claims.ToList());
+                                foreach (var r in appUser.RoleList)
+                                {
+                                    claimsIdentity.AddClaim(new Claim(ClaimTypes.Role, r));
+                                }
+                            }
+                            
                             claimsIdentity?.AddClaim(claim);
                         }
                     };
                 }
             ).AddOpenIdConnect(GOOGLE_OPEN_ID_AUTH_SCHEME, options =>
                 {
-                    options.Authority = "https://accounts.google.com";
-                    options.ClientId = "1047106611754-b6mtjf8njk5ttbri83lshkn88gpbsisf.apps.googleusercontent.com";
-                    options.ClientSecret = "RrdDUGev8tSyzs9UPIeE646t";
-                    options.CallbackPath = "/auth";
+                    options.Authority = Configuration["GoogleOpenId:Authority"];
+                    options.ClientId = Configuration["GoogleOpenId:ClientId"];
+                    options.ClientSecret = Configuration["GoogleOpenId:ClientSecret"];
+                    options.CallbackPath = Configuration["GoogleOpenId:CallbackPath"];
+                    // options.SaveTokens = false;
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        NameClaimType = "name",
+                    };
                 }
             ).AddOpenIdConnect(OKTA_OPEN_ID_AUTH_SCHEME, options =>
             {
-                options.Authority = "https://dev-12251583.okta.com/oauth2/default";
-                options.ClientId = "0oa1i21bkolUSiwoy5d7";
-                options.ClientSecret = "YftbgfYlOKinITWCfYD9gbnZbMZizNbh1UCv4lmN";
-                options.CallbackPath = "/okta-auth";
-                options.SignedOutCallbackPath = "/okta-signout";
+                options.Authority = Configuration["OktaOpenId:Authority"];
+                options.ClientId = Configuration["OktaOpenId:ClientId"];
+                options.ClientSecret = Configuration["OktaOpenId:ClientSecret"];
+                options.CallbackPath = Configuration["OktaOpenId:CallbackPath"];
+                options.SignedOutCallbackPath = Configuration["OktaOpenId:SignedOutCallbackPath"];
                 options.ResponseType = OpenIdConnectResponseType.Code;
                 options.SaveTokens = true;
                 options.Scope.Add("openid");
                 options.Scope.Add("profile");
                 options.Scope.Add("offline_access");
+                // options.SaveTokens = false;
             });
         }
 

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using AspNet5CookieAuth.Models;
+using AspNet5CookieAuth.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -17,10 +18,12 @@ namespace AspNet5CookieAuth.Controllers
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;
+        private readonly UserService _userService;
 
-        public HomeController(ILogger<HomeController> logger)
+        public HomeController(ILogger<HomeController> logger, UserService userService)
         {
             _logger = logger;
+            _userService = userService;
         }
 
         public IActionResult Index()
@@ -57,17 +60,9 @@ namespace AspNet5CookieAuth.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Validate(string username, string password, string returnUrl)
         {
-            ViewData["returnUrl"] = returnUrl;
-            if (
-                username == "Bill" && password == "1"
-                || username == "John" && password == "2"
-            )
+            returnUrl = string.IsNullOrEmpty(returnUrl) ? "/" : returnUrl;
+            if (_userService.TryValidateUser(username, password, out List<Claim> claims))
             {
-                var claims = new List<Claim>
-                {
-                    new(ClaimTypes.NameIdentifier, username),
-                    new(ClaimTypes.Name, $"{username} {(username == "Bill" ? "Gates" : "Connor")}")
-                };
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
                 var items = new Dictionary<string, string>
@@ -89,6 +84,10 @@ namespace AspNet5CookieAuth.Controllers
             {
                 await HttpContext.SignOutAsync();
                 return Redirect(@"https://accounts.google.com/Logout?&continue=https://appengine.google.com/_ah/logout?continue=https://localhost:5001");
+            } else if(scheme == CookieAuthenticationDefaults.AuthenticationScheme)
+            {
+                await HttpContext.SignOutAsync();
+                return Redirect(@"https://localhost:5001");
             }
             return new SignOutResult(new[] {CookieAuthenticationDefaults.AuthenticationScheme, scheme});
         }
